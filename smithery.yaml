@@ -1,0 +1,24 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - endpoint
+    properties:
+      headers:
+        type: string
+        description: Optional JSON string of headers to send with the GraphQL requests.
+      endpoint:
+        type: string
+        description: The GraphQL server endpoint URL.
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => ({ 
+      command: 'node', 
+      args: ['/app/dist/index.js', '--endpoint', config.endpoint].concat(config.headers ? ['--headers', config.headers] : []), 
+      env: { MCP_TRANSPORT: 'stdio', NODE_ENV: 'production' } 
+    })
