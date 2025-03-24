@@ -1,6 +1,6 @@
 {
   "name": "@kailashg101/graphql-mcp-toolkit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for connecting to GraphQL servers",
   "module": "index.ts",
   "type": "module",
