@@ -32,5 +32,9 @@ WORKDIR /app
 COPY --from=builder /app/dist /app/dist
 COPY --from=builder /app/package.json /app/
 
-# Set the command to run the server
-ENTRYPOINT ["node", "/app/dist/index.js"]
+# Configure to use STDIO
+ENV NODE_ENV=production
+ENV MCP_TRANSPORT=stdio
+
+# Run the server with STDIO transport
+CMD ["node", "/app/dist/index.js"]
