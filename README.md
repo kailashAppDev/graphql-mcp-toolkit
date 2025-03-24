@@ -1,10 +1,8 @@
 # mcp-graphql
 
-[![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/mcp-graphql)
+[![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/graphql-mcp-toolkit)
 
 A Model Context Protocol server that enables LLMs to interact with GraphQL APIs. This implementation provides schema introspection and query execution capabilities, allowing models to discover and use GraphQL APIs dynamically.
-
-<a href="https://glama.ai/mcp/servers/4zwa4l8utf"><img width="380" height="200" src="https://glama.ai/mcp/servers/4zwa4l8utf/badge" alt="mcp-graphql MCP server" /></a>
 
 ## Usage
 
@@ -12,13 +10,13 @@ Run `mcp-graphql` with the correct endpoint, it will automatically try to intros
 
 ### Command Line Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--endpoint` | GraphQL endpoint URL | `http://localhost:4000/graphql` |
-| `--headers` | JSON string containing headers for requests | `{}` |
-| `--enable-mutations` | Enable mutation operations (disabled by default) | `false` |
-| `--name` | Name of the MCP server | `mcp-graphql` |
-| `--schema` | Path to a local GraphQL schema file (optional) | - |
+| Argument             | Description                                      | Default                         |
+| -------------------- | ------------------------------------------------ | ------------------------------- |
+| `--endpoint`         | GraphQL endpoint URL                             | `http://localhost:4000/graphql` |
+| `--headers`          | JSON string containing headers for requests      | `{}`                            |
+| `--enable-mutations` | Enable mutation operations (disabled by default) | `false`                         |
+| `--name`             | Name of the MCP server                           | `mcp-graphql`                   |
+| `--schema`           | Path to a local GraphQL schema file (optional)   | -                               |
 
 ### Examples
 
@@ -41,7 +39,7 @@ npx mcp-graphql --endpoint http://localhost:3000/graphql --schema ./schema.graph
 The server provides two main tools:
 
 1. **introspect-schema**: This tool retrieves the GraphQL schema. Use this first if you don't have access to the schema as a resource.
-This uses either the local schema file or an introspection query.
+   This uses either the local schema file or an introspection query.
 
 2. **query-graphql**: Execute GraphQL queries against the endpoint. By default, mutations are disabled unless `--enable-mutations` is specified.
 
@@ -62,14 +60,15 @@ npx -y @smithery/cli install mcp-graphql --client claude
 ### Installing Manually
 
 It can be manually installed to Claude:
+
 ```json
 {
-    "mcpServers": {
-        "mcp-graphql": {
-            "command": "npx",
-            "args": ["mcp-graphql", "--endpoint", "http://localhost:3000/graphql"]
-        }
+  "mcpServers": {
+    "mcp-graphql": {
+      "command": "npx",
+      "args": ["mcp-graphql", "--endpoint", "http://localhost:3000/graphql"]
     }
+  }
 }
 ```
 
