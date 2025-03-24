@@ -1,6 +1,6 @@
 # mcp-graphql
 
-[![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/@kailashAppDev/graphql-mcp-toolkit)
+[![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/mcp-graphql)
 
 A Model Context Protocol server that enables LLMs to interact with GraphQL APIs. This implementation provides schema introspection and query execution capabilities, allowing models to discover and use GraphQL APIs dynamically.
 
@@ -51,7 +51,7 @@ The server provides two main tools:
 
 ### Installing via Smithery
 
-To install GraphQL MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-graphql):
+To install GraphQL MCP Toolkit for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-graphql):
 
 ```bash
 npx -y @smithery/cli install mcp-graphql --client claude
