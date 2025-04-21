@@ -3,237 +3,228 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { parse } from "graphql/language";
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
 import { z } from "zod";
+import { checkDeprecatedArguments } from "./helpers/deprecation.js";
+import { parseAndMergeHeaders } from "./helpers/header.js";
 import {
-	introspectEndpoint,
-	introspectLocalSchema,
+  introspectEndpoint,
+  introspectLocalSchema,
 } from "./helpers/introspection.js";
-import { getVersion } from "./helpers/package.js" with { type: "macro" };
+import { getVersion } from "./helpers/package.js";
 
-const graphQLSchema = z.object({
-	query: z.string(),
-	variables: z.string().optional(),
+// Check for deprecated command line arguments
+checkDeprecatedArguments();
+
+const EnvSchema = z.object({
+  NAME: z.string().default("mcp-graphql"),
+  ENDPOINT: z.string().url().default("http://localhost:4000/graphql"),
+  ALLOW_MUTATIONS: z.boolean().default(false),
+  HEADERS: z
+    .string()
+    .default("{}")
+    .transform((val) => {
+      try {
+        return JSON.parse(val);
+      } catch (e) {
+        throw new Error("HEADERS must be a valid JSON string");
+      }
+    }),
+  SCHEMA: z.string().optional(),
 });
 
-const ConfigSchema = z.object({
-	name: z.string().default("mcp-graphql"),
-	allowMutations: z.boolean().default(false),
-	endpoint: z.string().url().default("http://localhost:4000/graphql"),
-	headers: z.record(z.string()).default({}),
-	schema: z.string().optional(),
-});
-
-type Config = z.infer<typeof ConfigSchema>;
-
-function parseArgs(): Config {
-	const argv = yargs(hideBin(process.argv))
-		.option("name", {
-			type: "string",
-			description: "Name of the MCP server",
-			default: "mcp-graphql",
-		})
-		.option("endpoint", {
-			type: "string",
-			description: "GraphQL endpoint URL",
-			default: "http://localhost:4000/graphql",
-		})
-		.option("enable-mutations", {
-			type: "boolean",
-			description: "Enable mutations",
-			default: false,
-		})
-		.option("headers", {
-			type: "string",
-			description: "JSON string of headers to send with requests",
-			default: "{}",
-		})
-		.option("schema", {
-			type: "string",
-			description: "Path to a local GraphQL schema file",
-		})
-		.help()
-		.parseSync();
-
-	try {
-		return ConfigSchema.parse({
-			endpoint: argv.endpoint,
-			headers: typeof argv.headers === "string" ? JSON.parse(argv.headers) : {},
-		});
-	} catch (error) {
-		if (error instanceof z.ZodError) {
-			console.error("Invalid configuration:");
-			console.error(
-				error.errors
-					.map((e) => `  ${e.path.join(".")}: ${e.message}`)
-					.join("\n"),
-			);
-		} else {
-			console.error("Error parsing arguments:", error);
-		}
-		process.exit(1);
-	}
-}
-
-const config = parseArgs();
+const env = EnvSchema.parse(process.env);
 
 const server = new McpServer({
-	name: config.name,
-	version: getVersion(),
-	description: `GraphQL MCP server for ${config.endpoint}`,
+  name: env.NAME,
+  version: getVersion(),
+  description: `GraphQL MCP server for ${env.ENDPOINT}`,
 });
 
-server.resource(
-	"graphql-schema",
-	new URL(config.endpoint).href,
-	async (uri) => {
-		try {
-			let schema: string;
-			if (config.schema) {
-				schema = await introspectLocalSchema(config.schema);
-			} else {
-				schema = await introspectEndpoint(config.endpoint, config.headers);
-			}
+server.resource("graphql-schema", new URL(env.ENDPOINT).href, async (uri) => {
+  try {
+    let schema: string;
+    if (env.SCHEMA) {
+      schema = await introspectLocalSchema(env.SCHEMA);
+    } else {
+      schema = await introspectEndpoint(env.ENDPOINT, env.HEADERS);
+    }
 
-			return {
-				contents: [
-					{
-						uri: uri.href,
-						text: schema,
-					},
-				],
-			};
-		} catch (error) {
-			throw new Error(`Failed to get GraphQL schema: ${error}`);
-		}
-	},
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          text: schema,
+        },
+      ],
+    };
+  } catch (error) {
+    throw new Error(`Failed to get GraphQL schema: ${error}`);
+  }
+});
+
+server.tool(
+  "introspect-schema",
+  "Introspect the GraphQL schema, use this tool before doing a query to get the schema information if you do not have it available as a resource already.",
+  {
+    endpoint: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        `Optional: Override the default endpoint, the already used endpoint is: ${env.ENDPOINT}`
+      ),
+    headers: z
+      .union([z.record(z.string()), z.string()])
+      .optional()
+      .describe(
+        `Optional: Add additional headers, the already used headers are: ${JSON.stringify(
+          env.HEADERS
+        )}`
+      ),
+  },
+  async ({ endpoint, headers }) => {
+    try {
+      let schema: string;
+      if (env.SCHEMA) {
+        schema = await introspectLocalSchema(env.SCHEMA);
+      } else {
+        const useEndpoint = endpoint || env.ENDPOINT;
+        const useHeaders = parseAndMergeHeaders(env.HEADERS, headers);
+        schema = await introspectEndpoint(useEndpoint, useHeaders);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: schema,
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to introspect schema: ${error}`);
+    }
+  }
 );
 
 server.tool(
-	"introspect-schema",
-	"Introspect the GraphQL schema, use this tool before doing a query to get the schema information if you do not have it available as a resource already.",
-	{},
-	async () => {
-		try {
-			let schema: string;
-			if (config.schema) {
-				schema = await introspectLocalSchema(config.schema);
-			} else {
-				schema = await introspectEndpoint(config.endpoint, config.headers);
-			}
+  "query-graphql",
+  "Query a GraphQL endpoint with the given query and variables",
+  {
+    query: z.string(),
+    variables: z.string().optional(),
+    endpoint: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        `Optional: Override the default endpoint, the already used endpoint is: ${env.ENDPOINT}`
+      ),
+    headers: z
+      .union([z.record(z.string()), z.string()])
+      .optional()
+      .describe(
+        `Optional: Add additional headers, the already used headers are: ${JSON.stringify(
+          env.HEADERS
+        )}`
+      ),
+  },
+  async ({ query, variables, endpoint, headers }) => {
+    try {
+      const parsedQuery = parse(query);
 
-			return {
-				content: [
-					{
-						type: "text",
-						text: schema,
-					},
-				],
-			};
-		} catch (error) {
-			throw new Error(`Failed to introspect schema: ${error}`);
-		}
-	},
-);
+      // Check if the query is a mutation
+      const isMutation = parsedQuery.definitions.some(
+        (def) =>
+          def.kind === "OperationDefinition" && def.operation === "mutation"
+      );
 
-server.tool(
-	"query-graphql",
-	"Query a GraphQL endpoint with the given query and variables",
-	{ query: z.string(), variables: z.string().optional() },
-	async ({ query, variables }) => {
-		try {
-			const parsedQuery = parse(query);
+      if (isMutation && !env.ALLOW_MUTATIONS) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Mutations are not allowed unless you enable them in the configuration. Please use a query operation instead.",
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Invalid GraphQL query: ${error}`,
+          },
+        ],
+      };
+    }
 
-			// Check if the query is a mutation
-			const isMutation = parsedQuery.definitions.some(
-				(def) =>
-					def.kind === "OperationDefinition" && def.operation === "mutation",
-			);
+    try {
+      const useEndpoint = endpoint || env.ENDPOINT;
+      const useHeaders = parseAndMergeHeaders(env.HEADERS, headers);
 
-			if (isMutation && !config.allowMutations) {
-				return {
-					isError: true,
-					content: [
-						{
-							type: "text",
-							text: "Mutations are not allowed unless you enable them in the configuration. Please use a query operation instead.",
-						},
-					],
-				};
-			}
-		} catch (error) {
-			return {
-				isError: true,
-				content: [
-					{
-						type: "text",
-						text: `Invalid GraphQL query: ${error}`,
-					},
-				],
-			};
-		}
+      const response = await fetch(useEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...useHeaders,
+        },
+        body: JSON.stringify({
+          query,
+          variables,
+        }),
+      });
 
-		try {
-			const response = await fetch(config.endpoint, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					...config.headers,
-				},
-				body: JSON.stringify({
-					query,
-					variables,
-				}),
-			});
+      if (!response.ok) {
+        throw new Error(`GraphQL request failed: ${response.statusText}`);
+      }
 
-			if (!response.ok) {
-				throw new Error(`GraphQL request failed: ${response.statusText}`);
-			}
+      const data = await response.json();
 
-			const data = await response.json();
+      if (data.errors && data.errors.length > 0) {
+        // Contains GraphQL errors
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `The GraphQL response has errors, please fix the query: ${JSON.stringify(
+                data,
+                null,
+                2
+              )}`,
+            },
+          ],
+        };
+      }
 
-			if (data.errors && data.errors.length > 0) {
-				// Contains GraphQL errors
-				return {
-					isError: true,
-					content: [
-						{
-							type: "text",
-							text: `The GraphQL response has errors, please fix the query: ${JSON.stringify(
-								data,
-								null,
-								2,
-							)}`,
-						},
-					],
-				};
-			}
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(data, null, 2),
-					},
-				],
-			};
-		} catch (error) {
-			throw new Error(`Failed to execute GraphQL query: ${error}`);
-		}
-	},
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to execute GraphQL query: ${error}`);
+    }
+  }
 );
 
 async function main() {
-	const transport = new StdioServerTransport();
-	await server.connect(transport);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 
-	console.error(
-		`Started graphql mcp server ${config.name} for endpoint: ${config.endpoint}`,
-	);
+  console.error(
+    `Started graphql mcp server ${env.NAME} for endpoint: ${env.ENDPOINT}`
+  );
 }
 
 main().catch((error) => {
-	console.error(`Fatal error in main(): ${error}`);
-	process.exit(1);
+  console.error(`Fatal error in main(): ${error}`);
+  process.exit(1);
 });
