@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kailashappdev-graphql-mcp-toolkit-badge.png)](https://mseep.ai/app/kailashappdev-graphql-mcp-toolkit)
+
 # mcp-graphql
 
 [![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/mcp-graphql)
